@@ -1,14 +1,16 @@
-using QRCode
+using QRCodes
 using Test
 using Images
 using Random
 
-import QRCode: makeblocks, geterrcorrblock, interleave, emptymatrix,
+import QRCodes: makeblocks, geterrcorrblock, getmode, getversion, interleave, emptymatrix,
                characterscapacity, modeindicators, getcharactercountindicator,
                encodedata, ecblockinfo, padencodedmessage, makemasks, addformat,
-               placedata!
-import QRCode.Polynomial: Poly, antilogtable, logtable, generator,
+               placedata!, qrcode, Byte, Numeric, Alphanumeric
+import QRCodes.Polynomial: Poly, antilogtable, logtable, generator,
                           geterrorcorrection
+
+tmp = mktempdir()
 
 @testset "Test set for encoding modes" begin
     @test getmode("2983712983") == Numeric()
@@ -111,8 +113,8 @@ end
 
 @testset "Exporting a QR code" begin
     message = "To be or not to be a QR code?"
-    exportqrcode(message, "qrcode-test.png")
-    @test true
+    @test QRCodes.exportqr(joinpath(tmp, "qrcode-test.png"), QRCode(message)) == 486
+    @test QRCodes.exportqr(joinpath(tmp, "qrcode-test.svg"), QRCode(message)) == false
 end
 
 @testset "Exporting all visible ISO-8859-1 characters" begin
@@ -121,8 +123,8 @@ end
                , "ãÄäÅåÂâÀàÁáAaª¾³²¼½¹€¥£\$¢¤~¦|¬>=<×÷±+®©°ˆ¸¨¯^˜´`•‡†‰%#&\\/"
                , "*@¶§}{][)(»«„”“\"›‹·….¿?¡!:;,—–-_9876543210"
                )
-    exportqrcode(message, "qrcode-ISO-8859-1-test.png")
-    @test true
+    @test QRCodes.exportqr(joinpath(tmp, "qrcode-ISO-8859-1-test.png"), QRCode(message)) == 1072
+    @test QRCodes.exportqr(joinpath(tmp, "qrcode-ISO-8859-1-test.svg"), QRCode(message)) == false
 end
 
 @testset "Generating QR codes to test different masks" begin
@@ -152,14 +154,14 @@ end
         image[5:33, (i-1)*39+1:(i-1)*39+29] = matrix
     end
     img = colorview(Gray, .! image)
-    save("qrcode-masks.png", img)
+    save(joinpath(tmp, "qrcode-masks.png"), img)
     @test true
 end
 
 @testset "Generating QR codes to test with QR codes reader" begin
     s = 185 # maximum width of a QR code
-    for eclevel in [Low(), Medium(), Quartile(), High()]
-        for mode in [Numeric(), Alphanumeric(), Byte()]
+    for eclevel in (Low(), Medium(), Quartile(), High())
+        for mode in (Numeric(), Alphanumeric(), Byte())
             image = falses(s*5, s*8)
             for i in  0:4, j in 0:7
                 version = i*8 + j + 1
@@ -176,9 +178,31 @@ end
                 image[i*s+1:i*s+nm, j*s+1:j*s+nm] = matrix
             end
             path = "qrcode-$(typeof(mode))-$(typeof(eclevel))-versions.png"
-            save(path, colorview(Gray, .! image))
+            save(joinpath(tmp, path), colorview(Gray, .! image))
             println("$path created")
         end
     end
     @test true
+end
+
+@testset "Types and show methods" begin
+    
+    @test QRCode("QR").bitmap == QRCodes.qrcode("QR")
+    @test QRCode("QR").s == "QR"
+    @test QRCode("QR").eclevel == Medium()
+
+    io = IOBuffer()
+
+    show(io, MIME("text/plain"), QRCode("QR"))
+    s = String(take!(io))
+    @test length(s) == 543
+
+    show(io, MIME("image/svg+xml"), QRCode("QR"))
+    s = String(take!(io))
+    @test s[3:5] == "xml"
+
+    show(io, MIME("image/png"), QRCode("QR"))
+    s = take!(io)
+    @test Int(sum(s)) == 36133
+
 end
